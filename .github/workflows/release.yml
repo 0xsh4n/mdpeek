@@ -1,0 +1,54 @@
+name: Release
+
+# Push a tag like v1.0.0 to build binaries for every platform and publish a
+# GitHub Release with archives and checksums.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      snapshot:
+        description: "Build only (no publish) - uploads archives as a workflow artifact"
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Test
+        run: go test -count=1 ./...
+      - name: GoReleaser (release)
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: GoReleaser (snapshot)
+        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: release --snapshot --clean
+      - name: Upload snapshot archives
+        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: mdpeek-snapshot
+          path: |
+            dist/*.tar.gz
+            dist/*.zip
+            dist/checksums.txt
